@@ -1,0 +1,2 @@
+Requirement already satisfied: opencv-python in c:\users\mrhai\appdata\local\python\pythoncore-3.14-64\lib\site-packages (4.13.0.92)
+Requirement already satisfied: numpy>=2 in c:\users\mrhai\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from opencv-python) (2.4.2)
