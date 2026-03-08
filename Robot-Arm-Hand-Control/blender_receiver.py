@@ -123,22 +123,27 @@ def apply_rotations():
             # Convert degrees to radians and map elbow angle (0-180) to rotation
             # Elbow angle of 180 (fully bent) -> 0 rotation
             # Elbow angle of 0 (fully extended) -> 180 degrees rotation
-            elbow_rad = math.radians(180 - prev_angles["elbow"])
+            elbow_deg = 180 - prev_angles["elbow"]
+            elbow_rad = math.radians(elbow_deg)
             obj.rotation_euler[0] = elbow_rad  # X-axis rotation
         
         # Middle cube: Local Y rotation based on wrist rotation
         if MIDDLE_CUBE in bpy.data.objects:
             obj = bpy.data.objects[MIDDLE_CUBE]
-            # Wrist rotation is already in degrees (-90 to +90)
-            wrist_rad = math.radians(prev_angles["wrist"])
+            # Wrist rotation with -90 degree offset
+            wrist_deg = prev_angles["wrist"] - 90
+            wrist_rad = math.radians(wrist_deg)
             obj.rotation_euler[1] = wrist_rad  # Y-axis rotation
+            print(f"Wrist: {prev_angles['wrist']:.1f}° → offset: {wrist_deg:.1f}° → {math.degrees(wrist_rad):.1f}°")
         
         # Top cube: Local X rotation based on finger-palm angle
         if TOP_CUBE in bpy.data.objects:
             obj = bpy.data.objects[TOP_CUBE]
-            # Finger angle: 0 = extended/open palm (no rotation), 90 = closed/bent (90 deg rotation)
-            finger_rad = math.radians(prev_angles["fingers"])
+            # Finger angle with +100 degree offset
+            finger_deg = prev_angles["fingers"] + 100
+            finger_rad = math.radians(finger_deg)
             obj.rotation_euler[0] = finger_rad  # X-axis rotation
+            print(f"Fingers: {prev_angles['fingers']:.1f}° → offset: {finger_deg:.1f}° → {math.degrees(finger_rad):.1f}°")
         
         # Force viewport update
         bpy.context.view_layer.update()

@@ -78,12 +78,12 @@ def main():
             "fingers": None
         }
         
-        # Calculate elbow angle from pose (RIGHT ARM ONLY)
+        # Calculate elbow angle from pose (RIGHT ARM from user's perspective)
         if pose_results.pose_landmarks:
             draw_pose_landmarks(frame, pose_results.pose_landmarks)
             
-            # Calculate RIGHT elbow angle specifically
-            elbow_angle = calculate_elbow_angle(pose_results.pose_landmarks, side='right')
+            # Use 'left' because frame is mirrored - user's RIGHT arm appears as LEFT to camera
+            elbow_angle = calculate_elbow_angle(pose_results.pose_landmarks, side='left')
             if elbow_angle is not None:
                 # Add to smoothing buffer
                 elbow_buffer.append(elbow_angle)

@@ -560,14 +560,14 @@ def calculate_elbow_angle(pose_landmarks, side='right'):
         return None
     
     # Create vectors for the two arm segments
-    # Vector from elbow to shoulder
+    # Vector A: from shoulder to elbow
     v1 = np.array([
-        shoulder.x - elbow.x,
-        shoulder.y - elbow.y,
-        shoulder.z - elbow.z
+        elbow.x - shoulder.x,
+        elbow.y - shoulder.y,
+        elbow.z - shoulder.z
     ])
     
-    # Vector from elbow to wrist
+    # Vector B: from elbow to wrist
     v2 = np.array([
         wrist.x - elbow.x,
         wrist.y - elbow.y,
