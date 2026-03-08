@@ -471,3 +471,187 @@ def draw_pose_landmarks(frame, pose_landmarks):
         mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
         mp_drawing.DrawingSpec(color=(0, 255, 255), thickness=2)
     )
+
+def calculate_wrist_rotation(hand_landmarks):
+    """
+    Calculate pronation/supination angle of the forearm
+    
+    This function determines the rotation of the hand around the wrist axis
+    (pronation/supination - when radius crosses over ulna) by analyzing the
+    3D orientation of the hand using z-coordinates and landmark positions.
+    
+    Args:
+        hand_landmarks: MediaPipe hand landmarks
+        
+    Returns:
+        float: Pronation/supination angle in degrees
+               Negative = Pronation (palm down)
+               Positive = Supination (palm up)
+               0 = Neutral (palm facing sideways)
+    """
+    # Get key landmarks for calculating hand plane orientation
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    thumb_cmc = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_CMC]
+    index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+    pinky_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+    middle_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+    
+    # Create vectors to define the hand plane
+    # Vector from wrist to middle finger base (along hand)
+    v1 = np.array([
+        middle_mcp.x - wrist.x,
+        middle_mcp.y - wrist.y,
+        middle_mcp.z - wrist.z
+    ])
+    
+    # Vector from pinky side to thumb side (across hand)
+    v2 = np.array([
+        index_mcp.x - pinky_mcp.x,
+        index_mcp.y - pinky_mcp.y,
+        index_mcp.z - pinky_mcp.z
+    ])
+    
+    # Calculate normal vector to hand plane using cross product
+    # This normal points in the direction the palm is facing
+    normal = np.cross(v1, v2)
+    
+    # Normalize the vector
+    normal_length = np.linalg.norm(normal)
+    if normal_length > 0:
+        normal = normal / normal_length
+    
+    # The z-component of the normal indicates pronation/supination
+    # When palm faces camera (supination), normal.z is positive
+    # When palm faces away (pronation), normal.z is negative
+    # Calculate angle from the z-component
+    # Clamp to [-1, 1] to avoid arcsin domain errors
+    z_component = np.clip(normal[2], -1.0, 1.0)
+    
+    # Calculate angle in degrees
+    # arcsin gives us angle from -90 (pronation) to +90 (supination)
+    angle = np.degrees(np.arcsin(z_component))
+    
+    return angle
+
+def calculate_elbow_angle(pose_landmarks, side='right'):
+    """
+    Calculate the angle at the elbow joint
+    
+    Args:
+        pose_landmarks: MediaPipe pose landmarks
+        side: 'right' or 'left' to specify which arm
+        
+    Returns:
+        float: Elbow angle in degrees (0 = fully extended, 180 = fully bent)
+               Returns None if landmarks are not visible
+    """
+    # Get the appropriate landmarks based on side
+    if side.lower() == 'right':
+        shoulder = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]
+        elbow = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_ELBOW]
+        wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_WRIST]
+    else:
+        shoulder = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER]
+        elbow = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_ELBOW]
+        wrist = pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_WRIST]
+    
+    # Check if landmarks are visible (visibility threshold)
+    if shoulder.visibility < 0.5 or elbow.visibility < 0.5 or wrist.visibility < 0.5:
+        return None
+    
+    # Create vectors for the two arm segments
+    # Vector from elbow to shoulder
+    v1 = np.array([
+        shoulder.x - elbow.x,
+        shoulder.y - elbow.y,
+        shoulder.z - elbow.z
+    ])
+    
+    # Vector from elbow to wrist
+    v2 = np.array([
+        wrist.x - elbow.x,
+        wrist.y - elbow.y,
+        wrist.z - elbow.z
+    ])
+    
+    # Calculate the angle using dot product
+    # cos(θ) = (v1 · v2) / (|v1| * |v2|)
+    dot_product = np.dot(v1, v2)
+    magnitude_v1 = np.linalg.norm(v1)
+    magnitude_v2 = np.linalg.norm(v2)
+    
+    if magnitude_v1 == 0 or magnitude_v2 == 0:
+        return None
+    
+    # Calculate cosine and clamp to valid range
+    cos_angle = dot_product / (magnitude_v1 * magnitude_v2)
+    cos_angle = np.clip(cos_angle, -1.0, 1.0)
+    
+    # Convert to degrees
+    angle = np.degrees(np.arccos(cos_angle))
+    
+    return angle
+
+def calculate_finger_palm_angle(hand_landmarks):
+    """
+    Calculate the angle between fingers and palm
+    
+    This measures how much the fingers are bent relative to the palm plane.
+    Useful for gripper control or hand state detection.
+    
+    Args:
+        hand_landmarks: MediaPipe hand landmarks
+        
+    Returns:
+        float: Angle in degrees (0 = fingers flat/extended, 90 = fingers perpendicular to palm)
+    """
+    # Get wrist and MCP (knuckle) landmarks to define palm plane
+    wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+    index_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+    middle_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+    ring_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_MCP]
+    pinky_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+    
+    # Get finger tip landmarks
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    
+    # Calculate average MCP position (center of knuckles)
+    avg_mcp = np.array([
+        (index_mcp.x + middle_mcp.x + ring_mcp.x + pinky_mcp.x) / 4,
+        (index_mcp.y + middle_mcp.y + ring_mcp.y + pinky_mcp.y) / 4,
+        (index_mcp.z + middle_mcp.z + ring_mcp.z + pinky_mcp.z) / 4
+    ])
+    
+    # Calculate average finger tip position
+    avg_tip = np.array([
+        (index_tip.x + middle_tip.x + ring_tip.x + pinky_tip.x) / 4,
+        (index_tip.y + middle_tip.y + ring_tip.y + pinky_tip.y) / 4,
+        (index_tip.z + middle_tip.z + ring_tip.z + pinky_tip.z) / 4
+    ])
+    
+    # Vector from wrist to knuckles (palm direction)
+    palm_vector = avg_mcp - np.array([wrist.x, wrist.y, wrist.z])
+    
+    # Vector from knuckles to fingertips (finger direction)
+    finger_vector = avg_tip - avg_mcp
+    
+    # Calculate angle between palm and fingers
+    dot_product = np.dot(palm_vector, finger_vector)
+    magnitude_palm = np.linalg.norm(palm_vector)
+    magnitude_finger = np.linalg.norm(finger_vector)
+    
+    if magnitude_palm == 0 or magnitude_finger == 0:
+        return 0.0
+    
+    # Calculate cosine and clamp
+    cos_angle = dot_product / (magnitude_palm * magnitude_finger)
+    cos_angle = np.clip(cos_angle, -1.0, 1.0)
+    
+    # Convert to degrees
+    # Return the supplementary angle so that 0 = extended, 90 = perpendicular
+    angle = 180 - np.degrees(np.arccos(cos_angle))
+    
+    return angle
